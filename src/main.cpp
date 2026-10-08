@@ -4,32 +4,54 @@
 // put function declarations here:
 int myFunction(int, int);
 void initWifi(char *, char *, unsigned long);
+void quandoDispositivoConectar(WiFiEvent_t, WiFiEventInfo_t);
+
 int result = 0;
 char *ssid = "";
 char *pw = "";
+
+const char* ap_ssid = "Telemetry_AP";
+const char* ap_password = "telemetria"; // Mínimo 8 caracteres
+
 unsigned long TIMEOUT_CONNECTION = 10000;
+
 
 void setup()
 {
   Serial.begin(115200);
   delay(2000); // Aguarda 1 segundo entre cada envio
 
-  unsigned long startedWifiFunc = millis();
-  initWifi(ssid, pw, startedWifiFunc);
-  result = myFunction(2, 3);
+// Configura o ESP32 como Ponto de Acesso
+    WiFi.softAP(ap_ssid, ap_password);
+
+    WiFi.onEvent(quandoDispositivoConectar, ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED);
+
+    Serial.println("Ponto de Acesso Wi-Fi Iniciado!");
+    Serial.print("Conecte-se na rede: ");
+    Serial.println(ap_ssid);
+    Serial.print("Acesse o IP do servidor: ");
+    Serial.println(WiFi.softAPIP()); // O IP padrão costuma ser 192.168.4.1
+
+    
+  // unsigned long startedWifiFunc = millis();
+  // initWifi(ssid, pw, startedWifiFunc);
+  // result = myFunction(2, 3);
 }
 
 void loop()
 {
   // put your main code here, to run repeatedly:
+  Serial.print("Dispositivos conectados à rede: ");
+    Serial.println(WiFi.softAPgetStationNum());
 
-  delay(1000); // Aguarda 1 segundo entre cada envio
+    delay(2000);
 }
 
 // put function definitions here:
-int myFunction(int x, int y)
-{
-  return x + y;
+
+void quandoDispositivoConectar(WiFiEvent_t event, WiFiEventInfo_t info) {
+    Serial.print("Novo dispositivo ligado! IP atribuido: ");
+    Serial.println(IPAddress(info.wifi_ap_staipassigned.ip.addr));
 }
 
 void initWifi(char *ssid, char *pw, unsigned long startedWifiFunc)
