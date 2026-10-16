@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title> Telemetry - ESP32 Dashboard</title>
+  <style>
+    :root {
+      --bg-color: #0b0e14;
+      --card-bg: #161b22;
+      --border-color: #21262d;
+      --text-main: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent-green: #00ff88;
+      --accent-cyan: #00d4ff;
+      --accent-orange: #ffaa00;
+      --accent-red: #ff4444;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      padding: 15px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Barra Superior de Status */
+    header {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 15px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .title-group h1 {
+      font-size: 1.4rem;
+      color: var(--accent-cyan);
+      letter-spacing: 1px;
+    }
+
+    .title-group span {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .status-bar {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+
+    .status-badge {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+    }
+
+    .dot.offline {
+      background: var(--accent-red);
+      box-shadow: 0 0 8px var(--accent-red);
+    }
+
+    /* Navegação por Abas */
+    nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .tab-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 12px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s;
+      flex: 1;
+      text-align: center;
+    }
+
+    .tab-btn:hover {
+      border-color: var(--accent-cyan);
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      background: var(--accent-cyan);
+      color: #000;
+      border-color: var(--accent-cyan);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Tab 1: Dashboard Visual */
+    .grid-dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .metric-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      position: relative;
+    }
+
+    .metric-card.main {
+      grid-column: span 2;
+    }
+
+    @media (max-width: 600px) {
+      .metric-card.main {
+        grid-column: span 1;
+      }
+    }
+
+    .metric-label {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      font-size: 2.8rem;
+      font-weight: bold;
+      color: var(--accent-green);
+      line-height: 1.1;
+    }
+
+    .metric-unit {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 5px;
+    }
+
+    /* Barra de Progresso / RPM visual */
+    .rpm-bar-container {
+      width: 100%;
+      height: 14px;
+      background: #0d1117;
+      border-radius: 7px;
+      margin-top: 15px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+
+    .rpm-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-green) 60%, var(--accent-orange) 85%, var(--accent-red) 100%);
+      transition: width 0.1s linear;
+    }
+
+    /* Gráfico em Canvas */
+    .chart-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    canvas {
+      width: 100%;
+      height: 220px;
+      background: #0d1117;
+      border-radius: 8px;
+      display: block;
+    }
+
+    /* Tab 2: Lista de PIDs */
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      overflow-x: auto;
+      padding: 15px;
+    }
+
+    .search-box {
+      width: 100%;
+      padding: 10px 15px;
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-main);
+      margin-bottom: 15px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 12px 15px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      text-transform: uppercase;
+    }
+
+    .badge-status {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+
+    .badge-active { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); }
+    .badge-unsupported { background: rgba(255, 68, 68, 0.15); color: var(--accent-red); }
+
+    /* Tab 3: Datalogger & Exportação */
+    .logger-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .control-btns {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: opacity 0.2s;
+    }
+
+    .btn:hover { opacity: 0.85; }
+    .btn-success { background: var(--accent-green); color: #000; }
+    .btn-danger { background: var(--accent-red); color: #fff; }
+    .btn-secondary { background: #21262d; color: var(--text-main); border: 1px solid var(--border-color); }
+
+    .terminal-window {
+      background: #000;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 15px;
+      height: 250px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #33ff33;
+    }
+
+    .log-entry { margin-bottom: 4px; }
+    .log-time { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <!-- BARRA DE CABEÇALHO -->
+  <header>
+    <div class="title-group">
+      <h1>TELEMETRY</h1>
+      <span>ESP32 Automotive Gateway • ISO 15765-4 / CAN</span>
+    </div>
+    <div class="status-bar">
+      <div class="status-badge"><span class="dot" id="esp32Dot"></span> ESP32: OK</div>
+      <div class="status-badge"><span class="dot" id="ecuDot"></span> ECU: Conectada</div>
+      <div class="status-badge">Taxa: <b id="rateHz" style="color: var(--accent-cyan);">20 Hz</b></div>
+      <div class="status-badge">Bateria: <b id="batVolt" style="color: var(--accent-green);">13.8V</b></div>
+    </div>
+  </header>
+
+  <!-- ABAS DE NAVEGAÇÃO -->
+  <nav>
+    <button class="tab-btn active" onclick="openTab('dashboard')">📊 Painel Visual</button>
+    <button class="tab-btn" onclick="openTab('pids')">📋 Lista de PIDs (OBD-II)</button>
+    <button class="tab-btn" onclick="openTab('datalogger')">💾 Datalogger & Exportação</button>
+  </nav>
+
+  <!-- ABA 1: DASHBOARD VISUAL -->
+  <div id="dashboard" class="tab-content active">
+    <div class="grid-dashboard">
+      
+      <!-- RPM -->
+      <div class="metric-card main">
+        <div class="metric-label">Rotação do Motor (RPM)</div>
+        <div class="metric-value" id="valRpm">850</div>
+        <div class="metric-unit">RPM (Máx: 6500)</div>
+        <div class="rpm-bar-container">
+          <div class="rpm-bar-fill" id="rpmBar"></div>
+        </div>
+      </div>
+
+      <!-- Posição da Borboleta -->
+      <div class="metric-card">
+        <div class="metric-label">Acelerador (TPS)</div>
+        <div class="metric-value" id="valTps" style="color: var(--accent-cyan);">0.0</div>
+        <div class="metric-unit">% de abertura</div>
+      </div>
+
+      <!-- Velocidade -->
+      <div class="metric-card">
+        <div class="metric-label">Velocidade</div>
+        <div class="metric-value" id="valSpeed" style="color: #fff;">0</div>
+        <div class="metric-unit">km/h</div>
+      </div>
+
+      <!-- Temp Água -->
+      <div class="metric-card">
+        <div class="metric-label">Temp. Liquido Arrefecimento</div>
+        <div class="metric-value" id="valTemp" style="color: var(--accent-orange);">88</div>
+        <div class="metric-unit">°C (Normal)</div>
+      </div>
+
+      <!-- Pressão MAP -->
+      <div class="metric-card">
+        <div class="metric-label">Pressão Coletor (MAP)</div>
+        <div class="metric-value" id="valMap" style="color: #bc8cff;">38</div>
+        <div class="metric-unit">kPa</div>
+      </div>
+
+    </div>
+
+    <!-- GRÁFICO EM TEMPO REAL -->
+    <div class="chart-card">
+      <div class="metric-label" style="margin-bottom: 15px;">Histórico de RPM & TPS (Últimos 10 segundos)</div>
+      <canvas id="realtimeChart"></canvas>
+    </div>
+  </div>
+
+  <!-- ABA 2: LISTA COMPLETA DE PIDs -->
+  <div id="pids" class="tab-content">
+    <div class="table-container">
+      <input type="text" class="search-box" id="pidSearch" placeholder="Pesquisar por PID, parâmetro ou status..." onkeyup="filterPids()">
+      <table>
+        <thead>
+          <tr>
+            <th>PID Hex</th>
+            <th>Parâmetro</th>
+            <th>Valor Atual</th>
+            <th>Unidade</th>
+            <th>Fórmula SAE J1979</th>
+            <th>Status na ECU</th>
+          </tr>
+        </thead>
+        <tbody id="pidTableBody">
+          <!-- Preenchido via JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ABA 3: DATALOGGER E EXPORTAÇÃO -->
+  <div id="datalogger" class="tab-content">
+    <div class="logger-panel">
+      <h3>Controle de Gravação na Flash / MicroSD</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">
+        Grave sessões de teste no cartão SD do ESP32 e exporte os dados em CSV para análise no Excel/Google Sheets ou relatórios PDF.
+      </p>
+
+      <div class="control-btns">
+        <button class="btn btn-success" id="btnRecord" onclick="toggleRecording()">🔴 Iniciar Gravação (REC)</button>
+        <button class="btn btn-secondary" onclick="exportCSV()">📥 Baixar CSV da Sessão</button>
+        <button class="btn btn-secondary" onclick="printReport()">📄 Gerar Relatório PDF</button>
+      </div>
+
+      <div style="font-size: 0.9rem;">
+        Status: <b id="recStatus" style="color: var(--text-muted);">Inativo</b> | 
+        Amostras Coletadas: <b id="recCount">0</b>
+      </div>
+
+      <div class="metric-label">Monitor de Tráfego de Mensagens OBD-II (RAW TCP/CAN):</div>
+      <div class="terminal-window" id="terminal">
+        <div class="log-entry"><span class="log-time">[00:00:00]</span> ESP32 conetado ao ELM327 em 192.168.0.10:35000</div>
+        <div class="log-entry"><span class="log-time">[00:00:01]</span> TX: 01 00 -> RX: 41 00 BE 1F A8 13 (PIDs $01-$20 Suportados)</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- LÓGICA DE ABAS ---
+    function openTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      
+      document.getElementById(tabId).classList.add('active');
+      event.currentTarget.classList.add('active');
+    }
+
+    // --- BASE DE DADOS DE PIDs (Simulação da Tabela Wikipedia/SAE J1979) ---
+    const pidDatabase = [
+      { hex: '0x04', name: 'Calculated Engine Load', val: 24.5, unit: '%', formula: 'A * 100 / 255', active: true },
+      { hex: '0x05', name: 'Engine Coolant Temp', val: 88, unit: '°C', formula: 'A - 40', active: true },
+      { hex: '0x0B', name: 'Intake Manifold Absolute Pressure', val: 38, unit: 'kPa', formula: 'A', active: true },
+      { hex: '0x0C', name: 'Engine Speed (RPM)', val: 850, unit: 'rpm', formula: '(256A + B) / 4', active: true },
+      { hex: '0x0D', name: 'Vehicle Speed', val: 0, unit: 'km/h', formula: 'A', active: true },
+      { hex: '0x0E', name: 'Timing Advance', val: 12.0, unit: '° BTDC', formula: '(A - 64) / 2', active: true },
+      { hex: '0x0F', name: 'Intake Air Temp', val: 32, unit: '°C', formula: 'A - 40', active: true },
+      { hex: '0x11', name: 'Throttle Position (TPS)', val: 0.0, unit: '%', formula: 'A * 100 / 255', active: true },
+      { hex: '0x2F', name: 'Fuel Tank Level Input', val: 0, unit: '%', formula: 'A * 100 / 255', active: false },
+      { hex: '0x42', name: 'Control Module Voltage', val: 13.8, unit: 'V', formula: '(256A + B) / 1000', active: true },
+      { hex: '0x52', name: 'Ethanol Fuel %', val: 85, unit: '%', formula: 'A * 100 / 255', active: true },
+      { hex: '0x5C', name: 'Engine Oil Temperature', val: 0, unit: '°C', formula: 'A - 40', active: false }
+    ];
+
+    // Preenche tabela de PIDs
+    function renderPidTable() {
+      const tbody = document.getElementById('pidTableBody');
+      tbody.innerHTML = '';
+      
+      pidDatabase.forEach(pid => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><code style="color:var(--accent-cyan);">${pid.hex}</code></td>
+          <td><b>${pid.name}</b></td>
+          <td id="pid-val-${pid.hex}">${pid.active ? pid.val : 'N/A'}</td>
+          <td>${pid.unit}</td>
+          <td><small style="color:var(--text-muted);">${pid.formula}</small></td>
+          <td>
+            <span class="badge-status ${pid.active ? 'badge-active' : 'badge-unsupported'}">
+              ${pid.active ? 'ATIVO' : 'INDISPONÍVEL'}
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+    renderPidTable();
+
+    // Filtro de Busca
+    function filterPids() {
+      const query = document.getElementById('pidSearch').value.toLowerCase();
+      document.querySelectorAll('#pidTableBody tr').forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
+      });
+    }
+
+    // --- SIMULAÇÃO EM TEMPO REAL (MOCK ENGINE) ---
+    let timeStep = 0;
+    let isRecording = false;
+    let loggedSamples = [];
+    let sampleCounter = 0;
+
+    // Histórico para o gráfico
+    const maxHistory = 50;
+    const rpmHistory = new Array(maxHistory).fill(850);
+    const tpsHistory = new Array(maxHistory).fill(0);
+
+    function updateSimulation() {
+      timeStep += 0.1;
+      
+      // Simula variação de RPM e TPS (Aceleração e desaceleração)
+      const baseRpm = 1200 + Math.sin(timeStep * 0.5) * 800 + (Math.random() * 50);
+      const simulatedRpm = Math.max(800, Math.min(5500, Math.round(baseRpm)));
+      const simulatedTps = Math.max(0, Math.min(100, parseFloat(((simulatedRpm - 800) / 45).toFixed(1))));
+      const simulatedSpeed = Math.round(simulatedRpm / 35);
+
+      // Atualiza valores dos PIDs no mock
+      const rpmPid = pidDatabase.find(p => p.hex === '0x0C');
+      const tpsPid = pidDatabase.find(p => p.hex === '0x11');
+      const speedPid = pidDatabase.find(p => p.hex === '0x0D');
+
+      if (rpmPid) rpmPid.val = simulatedRpm;
+      if (tpsPid) tpsPid.val = simulatedTps;
+      if (speedPid) speedPid.val = simulatedSpeed;
+
+      // Atualiza interface do Dashboard
+      document.getElementById('valRpm').innerText = simulatedRpm;
+      document.getElementById('valTps').innerText = simulatedTps.toFixed(1);
+      document.getElementById('valSpeed').innerText = simulatedSpeed;
+
+      // Atualiza tabela
+      const elRpm = document.getElementById('pid-val-0x0C');
+      const elTps = document.getElementById('pid-val-0x11');
+      const elSpeed = document.getElementById('pid-val-0x0D');
+      if (elRpm) elRpm.innerText = simulatedRpm;
+      if (elTps) elTps.innerText = simulatedTps.toFixed(1);
+      if (elSpeed) elSpeed.innerText = simulatedSpeed;
+
+      // Atualiza Barra de RPM
+      const rpmPercent = Math.min(100, (simulatedRpm / 6500) * 100);
+      document.getElementById('rpmBar').style.width = rpmPercent + '%';
+
+      // Histórico do Gráfico
+      rpmHistory.push(simulatedRpm);
+      rpmHistory.shift();
+      tpsHistory.push(simulatedTps);
+      tpsHistory.shift();
+
+      drawChart();
+
+      // Gravação Datalogger
+      if (isRecording) {
+        sampleCounter++;
+        document.getElementById('recCount').innerText = sampleCounter;
+        loggedSamples.push({
+          timestamp: new Date().toISOString(),
+          rpm: simulatedRpm,
+          tps: simulatedTps,
+          speed: simulatedSpeed,
+          temp: 88,
+          battery: 13.8
+        });
+
+        if (sampleCounter % 10 === 0) {
+          addTerminalLog(`TX: 01 0C 01 11 -> RPM: ${simulatedRpm} | TPS: ${simulatedTps}%`);
+        }
+      }
+    }
+
+    // --- DESENHO DO GRÁFICO (CANVAS PURO) ---
+    function drawChart() {
+      const canvas = document.getElementById('realtimeChart');
+      const ctx = canvas.getContext('2d');
+      
+      // Responsive canvas internal resolution
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Linhas de Grade
+      ctx.strokeStyle = '#21262d';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < h; i += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(w, i);
+        ctx.stroke();
+      }
+
+      // Desenhar Linha de RPM (Verde)
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const step = w / (maxHistory - 1);
+
+      for (let i = 0; i < maxHistory; i++) {
+        const x = i * step;
+        const y = h - ((rpmHistory[i] / 6000) * (h - 20)) - 10;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Desenhar Linha de TPS (Ciano)
+      ctx.strokeStyle = '#00d4ff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i < maxHistory; i++) {
+        const x = i * step;
+        const y = h - ((tpsHistory[i] / 100) * (h - 20)) - 10;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // --- DATALOGGER & EXPORTAÇÃO ---
+    function toggleRecording() {
+      isRecording = !isRecording;
+      const btn = document.getElementById('btnRecord');
+      const status = document.getElementById('recStatus');
+
+      if (isRecording) {
+        btn.innerText = '⏹️ Parar Gravação';
+        btn.className = 'btn btn-danger';
+        status.innerText = 'Gravando...';
+        status.style.color = 'var(--accent-red)';
+        addTerminalLog('--- GRAVAÇÃO INICIADA ---');
+      } else {
+        btn.innerText = '🔴 Iniciar Gravação (REC)';
+        btn.className = 'btn btn-success';
+        status.innerText = 'Pausado';
+        status.style.color = 'var(--text-muted)';
+        addTerminalLog('--- GRAVAÇÃO FINALIZADA ---');
+      }
+    }
+
+    function addTerminalLog(msg) {
+      const term = document.getElementById('terminal');
+      const timeStr = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      div.innerHTML = `<span class="log-time">[${timeStr}]</span> ${msg}`;
+      term.appendChild(div);
+      term.scrollTop = term.scrollHeight;
+    }
+
+    function exportCSV() {
+      if (loggedSamples.length === 0) {
+        alert('Nenhum dado gravado para exportar. Inicie a gravação primeiro!');
+        return;
+      }
+
+      let csvContent = 'data:text/csv;charset=utf-8,Timestamp,RPM,TPS_Percent,Speed_KMH,Temp_C,Battery_V\n';
+      loggedSamples.forEach(row => {
+        csvContent += `${row.timestamp},${row.rpm},${row.tps},${row.speed},${row.temp},${row.battery}\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `telemetry_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+
+    function printReport() {
+      window.print();
+    }
+
+    // Loop de Atualização a 100ms (10 Hz)
+    setInterval(updateSimulation, 100);
+  </script>
+</body>
+</html>
