@@ -29,6 +29,7 @@ BluetoothSerial ElmBluetooth;
 WebSocketsClient BackendSocket;
 
 bool elmConnected = false;
+bool bluetoothStarted = false;
 bool backendConnected = false;
 bool subscriptionReceived = false;
 
@@ -675,7 +676,11 @@ void sendHello()
     String json;
     serializeJson(document, json);
 
-    BackendSocket.sendTXT(json);
+    if (!BackendSocket.sendTXT(json))
+    {
+        Serial.println("Falha ao enviar hello pelo WebSocket.");
+        return;
+    }
 
     Serial.print("Hello enviado: ");
     Serial.println(json);
@@ -725,7 +730,11 @@ void sendSupportedPids()
     String json;
     serializeJson(document, json);
 
-    BackendSocket.sendTXT(json);
+    if (!BackendSocket.sendTXT(json))
+    {
+        Serial.println("Falha ao enviar supportedPids pelo WebSocket.");
+        return;
+    }
 
     Serial.print(
         "supportedPids enviado: ");
@@ -753,7 +762,11 @@ void sendRawReading(
     String json;
     serializeJson(document, json);
 
-    BackendSocket.sendTXT(json);
+    if (!BackendSocket.sendTXT(json))
+    {
+        Serial.println("Falha ao enviar rawReading pelo WebSocket.");
+        return;
+    }
 
     Serial.print(
         "rawReading enviado: ");
@@ -1005,12 +1018,9 @@ void setup()
 
     startAccessPoint();
 
-    if (!startBluetooth())
-    {
-        return;
-    }
+    bluetoothStarted = startBluetooth();
 
-    if (connectToElm327())
+    if (bluetoothStarted && connectToElm327())
     {
         discoverSupportedPids();
     }
@@ -1032,16 +1042,23 @@ void loop()
     {
         lastElmReconnectAttempt = millis();
 
-        elmConnected =
-            connectToElm327();
-
-        if (elmConnected)
+        if (!bluetoothStarted)
         {
-            discoverSupportedPids();
+            bluetoothStarted = startBluetooth();
+        }
 
-            if (backendConnected)
+        if (bluetoothStarted)
+        {
+            elmConnected = connectToElm327();
+
+            if (elmConnected)
             {
-                sendSupportedPids();
+                discoverSupportedPids();
+
+                if (backendConnected)
+                {
+                    sendSupportedPids();
+                }
             }
         }
     }
